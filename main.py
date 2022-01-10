@@ -295,7 +295,11 @@ class Game:
         tmp[ (int(targetPos[0]), int(targetPos[1])) ] = piece # set target position piece to curr piece
         tmp[ (int(startPos[0]), int(startPos[1])) ] = None # set old pos of piece to None on board
 
-        return any([ i.enemyChecked(tmp) for i in tmp.values() if (i != None and i.color != team) ])
+        return any(
+            i.enemyChecked(tmp)
+            for i in tmp.values()
+            if (i != None and i.color != team)
+        )
     
 
     def move(self, userId, piece, target, promoteTo=False):
@@ -304,7 +308,7 @@ class Game:
 
             if True then emit the piece move.
         '''
-    
+
         if userId == self.turn: ## check if its the user's turn
             p = self.board[ (int(piece[0]), int(piece[1])) ]
             if (self.p1['team'] == p.color and self.p1['id'] == userId) or (self.p2['team'] == p.color and self.p2['id'] == userId): # check if the piece is the user's
@@ -339,26 +343,22 @@ class Game:
 
                         return True
 
-                    ### pawn promotion
                     elif check[0] == 'promotion':
-                        if promoteTo == False: ## if no parameter is given for what the pawn will promote into, then return False
-                            return False 
-                        else:
-                            acceptedPieces = {
-                                'rook': Rook,
-                                'bishop': Bishop,
-                                'knight': Knight,
-                                'queen': Queen,
-                            }
-                            if promoteTo not in acceptedPieces: ## make sure promoton piece is valid
-                                return False
-                            else:
-                                newPiece = acceptedPieces[promoteTo]( p.color, (int(target[0]), int(target[1])) )
-                                self.movePiece(p, piece, target, specialNotation=['promotion', promoteTo], pawnPromotion=newPiece)
+                        if promoteTo == False:
+                            return False
+                        acceptedPieces = {
+                            'rook': Rook,
+                            'bishop': Bishop,
+                            'knight': Knight,
+                            'queen': Queen,
+                        }
+                        if promoteTo not in acceptedPieces:
+                            return False
+                        newPiece = acceptedPieces[promoteTo]( p.color, (int(target[0]), int(target[1])) )
+                        self.movePiece(p, piece, target, specialNotation=['promotion', promoteTo], pawnPromotion=newPiece)
 
-                                return True
+                        return True
 
-                ### if piece is king and check is a list object then do castles
                 elif p.name == 'king' and type(check) == list:
                     if check[0] == 'castles':
 
@@ -368,7 +368,7 @@ class Game:
                         rookPiece = self.board[ rookStart ]
 
                         self.board[ rookStart ] = None
-                        
+
                         emit('castles', {
                             'rookPos': [rookStart[0], rookStart[1]],
                             'targetPos': [rookTarget[0], rookTarget[1]]
@@ -387,7 +387,7 @@ class Game:
 
                 elif check:
                     self.movePiece(p, piece, target)
-                
+
                     return True    
 
         return False
@@ -397,16 +397,14 @@ class Game:
         '''
             if userId is not in self.pReady then add it add it and return True otherwise False
         '''
-        if self.gameState == 0:
+        if self.gameState == 0 and userId not in self.pReady:
+            self.pReady.append(userId)
 
-            if userId not in self.pReady:
-                self.pReady.append(userId)
+            emit('user_ready', {
+                'ready': len(self.pReady)
+            }, to=self.gameId)
 
-                emit('user_ready', {
-                    'ready': len(self.pReady)
-                }, to=self.gameId)
-
-                return True
+            return True
 
         return False
 
@@ -422,7 +420,7 @@ class Game:
         data = {
             'ready': len(self.pReady)
         }
-        if gameEndType == None:
+        if gameEndType is None:
             currP = self.p[self.turn]
             otherP = [ v for (i, v) in self.p.items() if i != self.turn ][0]
 
@@ -486,18 +484,16 @@ def on_join(data):
         l = len(channels_cnt[room].keys())
 
         ## if user is already in when game is still in waiting room (this occurs when user refreshes page while in waiting room)
-        if any([ v['userId'] == username for (i,v) in channels_cnt[room].items() ]):
+        if any(
+            v['userId'] == username for (i, v) in channels_cnt[room].items()
+        ):
             join_room(room)
             return {'status': True}
 
         if l < 2:
             join_room(room)
 
-            if 'userpass' in data:
-                userpass = data['userpass']
-            else:
-                userpass = str(uuid.uuid4())
-            
+            userpass = data['userpass'] if 'userpass' in data else str(uuid.uuid4())
             channels_cnt[room]['p%s' % (l+1)] = {
                 'userId': username,
                 'name': name,
@@ -506,7 +502,7 @@ def on_join(data):
             }
 
             ## both players joined start game
-            if l+1 == 2:
+            if l == 1:
                 games[room] = Game(channels_cnt[room]['p1'], channels_cnt[room]['p2'], room)
 
                 channels.remove(room)
@@ -519,7 +515,7 @@ def on_join(data):
             games[room].emit_game_state()
             return {'status': True}
 
-    
+
     return {'status': False}
 
 
@@ -529,22 +525,19 @@ def move(data):
     username = data['username']
     userpass = data['userpass']
     room = data['room']
-    if room in games:
-
-        ## validate username and pass
-        if games[room].check(username, userpass):
-            
-            ## check if game still running 
-            if games[room].gameState == 1:
+    if (
+        room in games
+        and games[room].check(username, userpass)
+        and games[room].gameState == 1
+    ):
                 
                 ## check if promote paramater is there
-                if 'promote' in data.keys():
-                    if games[room].move(username, data['piece'], data['target'], promoteTo=data['promote']):
-                        return True
-                else: 
-                    if games[room].move(username, data['piece'], data['target']):
-                        return True
-    
+        if 'promote' in data.keys():
+            if games[room].move(username, data['piece'], data['target'], promoteTo=data['promote']):
+                return True
+        elif games[room].move(username, data['piece'], data['target']):
+            return True
+
     return False
 
 
@@ -554,39 +547,37 @@ def rematch(data):
     username = data['username']
     userpass = data['userpass']
     room = data['room']
-    if room in games:
+    if (
+        room in games
+        and games[room].check(username, userpass)
+        and games[room].gameState == 0
+        and games[room].readyUp(username)
+    ):
 
-        ## validate username and pass
-        if games[room].check(username, userpass):
-            
-            ## check if game still running 
-            if games[room].gameState == 0:
-                if games[room].readyUp(username):
-                    
-                    ## check if there are two players ready for rematch
-                    if len(games[room].pReady) == 2: ## create new game instance with same room id - switch two players teams
-                        tmp = games[room]
+        ## check if there are two players ready for rematch
+        if len(games[room].pReady) == 2: ## create new game instance with same room id - switch two players teams
+            tmp = games[room]
 
-                        p1 = {
-                            'userId': tmp.p2['id'],
-                            'name': tmp.p2['name'],
-                            'countryCode': tmp.p2['countryCode'],
-                            'pass': tmp.p2['pass']
-                        }
-                        p2 = {
-                            'userId': tmp.p1['id'],
-                            'name': tmp.p1['name'],
-                            'countryCode': tmp.p1['countryCode'],
-                            'pass': tmp.p1['pass']
-                        }
+            p1 = {
+                'userId': tmp.p2['id'],
+                'name': tmp.p2['name'],
+                'countryCode': tmp.p2['countryCode'],
+                'pass': tmp.p2['pass']
+            }
+            p2 = {
+                'userId': tmp.p1['id'],
+                'name': tmp.p1['name'],
+                'countryCode': tmp.p1['countryCode'],
+                'pass': tmp.p1['pass']
+            }
 
-                        ## remove old game
-                        del games[room]
+            ## remove old game
+            del games[room]
 
-                        ## create new game instance
-                        games[room] = Game(p1, p2, room)
+            ## create new game instance
+            games[room] = Game(p1, p2, room)
 
-                    return True
+        return True
     return False
 
 
@@ -599,17 +590,16 @@ def message(data):
     message = data['message']
     room = data['room']
 
-    if not any( [ True for i in allowed if message == i] ):
+    if not any(True for i in allowed if message == i):
         return False
 
-    if room in games:
-        if games[room].check(username, userpass):
-            emit('emote', {
-                'from': username,
-                'message': message
-            }, to=room)
-            return True
-    
+    if room in games and games[room].check(username, userpass):
+        emit('emote', {
+            'from': username,
+            'message': message
+        }, to=room)
+        return True
+
     return False
 
 

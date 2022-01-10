@@ -59,11 +59,7 @@ def getPiecesBetweenDiagLine(cx, cy, x, y, board):
 
 def targetHasSameColor(color, x, y, board):
     ## check if theres any piece at target
-    if piece := board[ (x, y) ]:
-        if piece.color == color: ## if there is then check if piece is same color
-            return True
-    
-    return False
+    return bool((piece := board[ (x, y) ]) and piece.color == color)
 
 
 ### ------------------------------- piece classes
@@ -102,10 +98,7 @@ class Piece:
         '''
             returns true or false depending on piece can move to target x and y
         '''
-        if (x, y) in self.getAvailableMoves(board):
-            return True
-
-        return False
+        return (x, y) in self.getAvailableMoves(board)
 
     def getTargets(self, board):
         '''
@@ -117,7 +110,11 @@ class Piece:
         '''
             returns whether or not this piece is threatening opponent king
         '''
-        return any([ board[ (pos[0], pos[1]) ].name == 'king' for pos in self.getTargets(board) if board[ (pos[0], pos[1]) ] != None ]) 
+        return any(
+            board[(pos[0], pos[1])].name == 'king'
+            for pos in self.getTargets(board)
+            if board[(pos[0], pos[1])] != None
+        ) 
 
 
 
@@ -129,19 +126,33 @@ class Rook(Piece):
 
 
     def getAvailableMoves(self, board):
-        moves = []
+        moves = [
+            (i, self.pos[1])
+            for i in range(9)
+            if self.withinBounds(i, self.pos[1])
+            and not targetHasSameColor(self.color, i, self.pos[1], board)
+            and len(
+                getPiecesBetweenStraightLine(
+                    self.pos[0], self.pos[1], i, self.pos[1], board
+                )
+            )
+            == 0
+        ]
 
-        ## x axis available moves
-        for i in range(0, 9):
-            if self.withinBounds(i, self.pos[1]) and not targetHasSameColor(self.color, i, self.pos[1], board):
-                if len(getPiecesBetweenStraightLine(self.pos[0], self.pos[1], i, self.pos[1], board)) == 0:
-                    moves.append( (i, self.pos[1]) )
 
         ## y axis available moves
-        for i in range(0, 9):
-            if self.withinBounds(self.pos[0], i) and not targetHasSameColor(self.color, self.pos[0], i, board):
-                if len(getPiecesBetweenStraightLine(self.pos[0], self.pos[1], self.pos[0], i, board)) == 0:
-                    moves.append( (self.pos[0], i) )
+        for i in range(9):
+            if (
+                self.withinBounds(self.pos[0], i)
+                and not targetHasSameColor(self.color, self.pos[0], i, board)
+                and len(
+                    getPiecesBetweenStraightLine(
+                        self.pos[0], self.pos[1], self.pos[0], i, board
+                    )
+                )
+                == 0
+            ):
+                moves.append( (self.pos[0], i) )
 
         return moves
 
@@ -184,15 +195,12 @@ class Bishop(Piece):
             for i in range(1, 9):
                 pos = (self.pos[0] + (x*i), self.pos[1]+ (y*i))
 
-                ## if coord is within bounds 
-                if self.withinBounds(*pos):
-                    if not targetHasSameColor(self.color, pos[0], pos[1], board):
-                        moves.append(pos)
-                        if board[ (pos[0], pos[1]) ]:
-                            break
-                    else:
-                        break
-                else:
+                if not self.withinBounds(*pos):
+                    break
+                if targetHasSameColor(self.color, pos[0], pos[1], board):
+                    break
+                moves.append(pos)
+                if board[ (pos[0], pos[1]) ]:
                     break
             return
         iterate(-1,1) ## top left diagonal
@@ -232,15 +240,12 @@ class Queen(Piece):
             for i in range(1, 9):
                 pos = (self.pos[0] + (x*i), self.pos[1]+ (y*i))
 
-                ## if coord is within bounds 
-                if self.withinBounds(*pos):
-                    if not targetHasSameColor(self.color, pos[0], pos[1], board):
-                        moves.append(pos)
-                        if board[ (pos[0], pos[1]) ]:
-                            break
-                    else:
-                        break
-                else:
+                if not self.withinBounds(*pos):
+                    break
+                if targetHasSameColor(self.color, pos[0], pos[1], board):
+                    break
+                moves.append(pos)
+                if board[ (pos[0], pos[1]) ]:
                     break
             return
         iterate(-1,1) ## top left diagonal
@@ -292,33 +297,39 @@ class King(Piece):
                 target = 3
 
             ## checks rook is at right coord
-            if rook := board[ (rook, self.pos[1]) ]:
-                ## checks if rook is hasnt moved and is on players' team
-                if rook.name == 'rook' and rook.hasMoved == False and rook.color == self.color:
-                    ## makes sure two squares between rook and king are empty
-                    if board[ (inbetween[0], self.pos[1]) ] == None and board[ (inbetween[1], self.pos[1]) ] == None:
-                        if longways:
-                            if board[ (inbetween[2], self.pos[1]) ] != None:
-                                return False
+            if (
+                (rook := board[(rook, self.pos[1])])
+                and rook.name == 'rook'
+                and rook.hasMoved == False
+                and rook.color == self.color
+                and board[(inbetween[0], self.pos[1])] is None
+                and board[(inbetween[1], self.pos[1])] is None
+            ):
+                if longways and board[(inbetween[2], self.pos[1])] != None:
+                    return False
 
-                        checkSafe = False
+                checkSafe = False
 
                         ## checks if the pieces inbetween the king and rook are safe for the king to be in (x = 6, 7 for shortways)
-                        for cnt in range(3):
-                            tmp = board.copy()
-                            tmpKing = tmp[ (self.pos[0], self.pos[1])  ]
-                            tmp[ (self.pos[0], self.pos[1])  ] = None
-                            tmp[ (self.pos[0]+(i*cnt), self.pos[1]) ] = tmpKing
+                for cnt in range(3):
+                    tmp = board.copy()
+                    tmpKing = tmp[ (self.pos[0], self.pos[1])  ]
+                    tmp[ (self.pos[0], self.pos[1])  ] = None
+                    tmp[ (self.pos[0]+(i*cnt), self.pos[1]) ] = tmpKing
 
-                            if any([ i.enemyChecked(tmp) for i in tmp.values() if (i != None and i.color != self.color) ]):
-                                break
+                    if any(
+                        i.enemyChecked(tmp)
+                        for i in tmp.values()
+                        if (i != None and i.color != self.color)
+                    ):
+                        break
 
-                            if cnt == 2:
-                                checkSafe = True
+                    if cnt == 2:
+                        checkSafe = True
 
-                        if checkSafe: ## if both squares are safe for king then add (7, pos[1]) to moveList
-                            moves.append( (target, self.pos[1]) )
-                            return True
+                if checkSafe: ## if both squares are safe for king then add (7, pos[1]) to moveList
+                    moves.append( (target, self.pos[1]) )
+                    return True
 
             return False
 
@@ -342,9 +353,8 @@ class King(Piece):
 
             elif (x, y) in check[0]:
                 return True
-        else:
-            if (x, y) in self.getAvailableMoves(board):
-                return True
+        elif (x, y) in self.getAvailableMoves(board):
+            return True
 
         return False
 
@@ -363,26 +373,27 @@ class Pawn(Piece):
     def getAvailableMoves(self, board, lastMove, doingEnPassant=False):
         moves = []
 
-        steps = 1
-
         upOrDown = 1 if self.direction == 'pos' else -1
 
-        if not self.hasMoved:
-            steps = 2
-
+        steps = 2 if not self.hasMoved else 1
         cnt = 0
         ## gets all forward available moves (1 usually or 2 if on starting pos)
-        for i in range(steps): 
+        for _ in range(steps): 
             cnt += upOrDown
             tmpY = self.pos[1] + cnt
 
-            if self.withinBounds(self.pos[0], tmpY) and not targetHasSameColor(self.color, self.pos[0], tmpY, board):
-
-                ## check if any pieces inbetween target and piece on straight line
-                if len(getPiecesBetweenStraightLine(self.pos[0], self.pos[1], self.pos[0], tmpY, board)) == 0:
-                    
-                    if not board[ (self.pos[0], tmpY) ]:
-                        moves.append((self.pos[0], tmpY))
+            if (
+                self.withinBounds(self.pos[0], tmpY)
+                and not targetHasSameColor(self.color, self.pos[0], tmpY, board)
+                and len(
+                    getPiecesBetweenStraightLine(
+                        self.pos[0], self.pos[1], self.pos[0], tmpY, board
+                    )
+                )
+                == 0
+                and not board[(self.pos[0], tmpY)]
+            ):
+                moves.append((self.pos[0], tmpY))
 
         ## gets all available moves for taking diagonally
         diagonals = [(-1, 1), (1, 1)] if self.direction == 'pos' else [(-1, -1), (1, -1)]
@@ -390,30 +401,31 @@ class Pawn(Piece):
             tmpX = item[0] + self.pos[0]
             tmpY = item[1] + self.pos[1]
 
-            if self.withinBounds(tmpX, tmpY) and not targetHasSameColor(self.color, tmpX, tmpY, board):
-
-                if b := board[ (tmpX, tmpY) ]:
-                    if b.color != self.color:
-                        moves.append((tmpX, tmpY))
+            if (
+                self.withinBounds(tmpX, tmpY)
+                and not targetHasSameColor(self.color, tmpX, tmpY, board)
+                and (b := board[(tmpX, tmpY)])
+                and b.color != self.color
+            ):
+                moves.append((tmpX, tmpY))
 
         enPassantMove = {}
-        ## en passant 
-        if lastMove:
-            if lastMove['name'] == 'pawn': ## if last move was a pawn
+        ## en passant
+        if (
+            lastMove
+            and lastMove['name'] == 'pawn'
+            and abs(lastMove['startPos'][1] - lastMove['newPos'][1]) == 2
+            and (lastMove['newPos'][1] == self.pos[1])
+            and (abs(lastMove['newPos'][0] - self.pos[0]) == 1)
+        ):
 
-                ## if the last move (by a pawn) was 2 steps
-                if abs(lastMove['startPos'][1] - lastMove['newPos'][1]) == 2:
+            step = 1 if self.direction == 'pos' else -1
+            moves.append( (lastMove['newPos'][0], (self.pos[1]+step)) )
+            enPassantMove = {
+                'targetPawn': lastMove['newPos'],
+                'targetSquare': (lastMove['newPos'][0], (self.pos[1]+step))
+            }
 
-                    ## if last move by pawn is right beside the pawn
-                    if (lastMove['newPos'][1] == self.pos[1]) and (abs(lastMove['newPos'][0] - self.pos[0]) == 1):
-                        
-                        step = 1 if self.direction == 'pos' else -1
-                        moves.append( (lastMove['newPos'][0], (self.pos[1]+step)) )
-                        enPassantMove = {
-                            'targetPawn': lastMove['newPos'],
-                            'targetSquare': (lastMove['newPos'][0], (self.pos[1]+step))
-                        }
-        
         if doingEnPassant:
             return moves, enPassantMove
 
@@ -438,10 +450,8 @@ class Pawn(Piece):
             elif (x, y) in check[0]:
                 return True
 
-        else:
-            ### normal move
-            if (x, y) in self.getAvailableMoves(board, lastMove):
-                return True
+        elif (x, y) in self.getAvailableMoves(board, lastMove):
+            return True
 
         return False
 
@@ -463,10 +473,12 @@ class Pawn(Piece):
             tmpX = item[0] + self.pos[0]
             tmpY = item[1] + self.pos[1]
 
-            if self.withinBounds(tmpX, tmpY) and not targetHasSameColor(self.color, tmpX, tmpY, board):
-
-                if b := board[ (tmpX, tmpY) ]:
-                    if b.color != self.color:
-                        moves.append((tmpX, tmpY))
+            if (
+                self.withinBounds(tmpX, tmpY)
+                and not targetHasSameColor(self.color, tmpX, tmpY, board)
+                and (b := board[(tmpX, tmpY)])
+                and b.color != self.color
+            ):
+                moves.append((tmpX, tmpY))
 
         return moves
