@@ -362,7 +362,6 @@ class Game:
 
                         return True
 
-                    ### pawn promotion
                     elif check[0] == 'promotion':
                         if promoteTo == False:  ## if no parameter is given for what the pawn will promote into, then return False
                             return False
@@ -433,10 +432,12 @@ class Game:
         '''
             if userId is not in self.pReady then add it add it and return True otherwise False
         '''
-        if self.gameState == 0:
+        if self.gameState == 0 and userId not in self.pReady:
+            self.pReady.append(userId)
 
-            if userId not in self.pReady:
-                self.pReady.append(userId)
+            emit('user_ready', {
+                'ready': len(self.pReady)
+            }, to=self.gameId)
 
                 emit('user_ready', {'ready': len(self.pReady)}, to=self.gameId)
 
@@ -622,13 +623,13 @@ def rematch(data):
                             'pass': tmp.p1['pass']
                         }
 
-                        ## remove old game
-                        del games[room]
+            ## remove old game
+            del games[room]
 
-                        ## create new game instance
-                        games[room] = Game(p1, p2, room)
+            ## create new game instance
+            games[room] = Game(p1, p2, room)
 
-                    return True
+        return True
     return False
 
 
